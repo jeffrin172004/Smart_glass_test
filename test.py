@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 import os
+import pyttsx3
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,24 +13,31 @@ load_dotenv()
 model = YOLO('yolov8n.pt')
 
 # Initialize LangChain LLM with API key from .env
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = ChatOpenAI(api_key=os.getenv('OPENAI_API_KEY'), model="gpt-4o-mini", temperature=0)
 
 # Define prompt template
 prompt_template = PromptTemplate.from_template(
     "Summarize the environment for a blind person based on these detected objects: {objects}."
 )
 
+# Function to convert text to speech and save as MP3
+def text_to_speech(text, output_file="summary.mp3"):
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 150)  # Speed of speech
+    engine.save_to_file(text, output_file)
+    engine.say(text)
+    engine.runAndWait()
+
+# Function to process a single frame from a video or an image
 def get_environment_summary_from_frame(source):
     detected_objects = set()
     
     # Check if source is an image or video
     if source.endswith(('.jpg', '.jpeg', '.png')):
-        # Read image
         frame = cv2.imread(source)
         if frame is None:
             raise ValueError("Could not read the image file.")
     else:
-        # Read first frame from video
         cap = cv2.VideoCapture(source)
         ret, frame = cap.read()
         cap.release()
@@ -48,11 +56,13 @@ def get_environment_summary_from_frame(source):
     chain = prompt_template | llm
     summary = chain.invoke({"objects": object_list})
     
+    # Convert summary to speech
+    text_to_speech(summary.content)
+    
     return summary.content
 
 # Example usage
-# For an image:
-# summary = get_environment_summary_from_frame('path_to_your_image.jpg')
-# For a video (uses first frame):
+# For video (first frame):
 summary = get_environment_summary_from_frame('eg.mp4')
 print(summary)
+
