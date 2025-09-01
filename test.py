@@ -15,9 +15,9 @@ model = YOLO('yolov8n.pt')
 # Initialize LangChain LLM with API key from .env
 llm = ChatOpenAI(api_key=os.getenv('OPENAI_API_KEY'), model="gpt-4o-mini", temperature=0)
 
-# Define prompt template
+# Define improved prompt template for blind users
 prompt_template = PromptTemplate.from_template(
-    "Summarize the environment for a blind person based on these detected objects: {objects}."
+    "You are assisting a blind person navigating an environment. Based on these detected objects and their positions: {objects_with_positions}, provide a concise, natural-language summary. Describe the scene clearly, focusing on the spatial arrangement of objects to guide navigation or interaction. For example, note if an object is nearby or farther away, and on which side, to help the user understand their surroundings."
 )
 
 # Function to convert text to speech and save as MP3
@@ -28,9 +28,33 @@ def text_to_speech(text, output_file="summary.mp3"):
     engine.say(text)
     engine.runAndWait()
 
+# Function to determine object position based on bounding box
+def get_object_position(box, frame_width, frame_height):
+    x_center = box.xywh[0][0].item()  # Center x-coordinate
+    y_center = box.xywh[0][1].item()  # Center y-coordinate
+    
+    # X-axis: left, center, right
+    if x_center < frame_width * 0.33:
+        x_pos = "left"
+    elif x_center > frame_width * 0.66:
+        x_pos = "right"
+    else:
+        x_pos = "center"
+    
+    # Y-axis: near (bottom), far (top)
+    if y_center < frame_height * 0.33:
+        y_pos = "far"
+    elif y_center > frame_height * 0.66:
+        y_pos = "near"
+    else:
+        y_pos = ""
+    
+    # Combine positions (e.g., "far left", "near right", or just "center" if no y distinction)
+    return f"{y_pos} {x_pos}".strip() if y_pos else x_pos
+
 # Function to process a single frame from a video or an image
 def get_environment_summary_from_frame(source):
-    detected_objects = set()
+    detected_objects_with_positions = []
     
     # Check if source is an image or video
     if source.endswith(('.jpg', '.jpeg', '.png')):
@@ -44,17 +68,22 @@ def get_environment_summary_from_frame(source):
         if not ret:
             raise ValueError("Could not read the video file.")
     
+    # Get frame dimensions
+    frame_height, frame_width = frame.shape[:2]
+    
     # Detect objects in the frame
     results = model(frame)
     for result in results:
         for box in result.boxes:
             cls = int(box.cls)
-            detected_objects.add(result.names[cls])
+            obj_name = result.names[cls]
+            position = get_object_position(box, frame_width, frame_height)
+            detected_objects_with_positions.append(f"{obj_name} in the {position}")
     
     # Generate summary with LangChain
-    object_list = ', '.join(detected_objects) if detected_objects else "No objects detected"
+    object_list = ', '.join(detected_objects_with_positions) if detected_objects_with_positions else "No objects detected"
     chain = prompt_template | llm
-    summary = chain.invoke({"objects": object_list})
+    summary = chain.invoke({"objects_with_positions": object_list})
     
     # Convert summary to speech
     text_to_speech(summary.content)
@@ -63,6 +92,6 @@ def get_environment_summary_from_frame(source):
 
 # Example usage
 # For video (first frame):
-summary = get_environment_summary_from_frame('eg.mp4')
+summary = get_environment_summary_from_frame('C:/Users/jeffr/OneDrive/Desktop/smart_glasses/eg.mp4')
 print(summary)
 
