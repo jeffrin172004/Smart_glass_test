@@ -5,6 +5,7 @@ from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 import os
 import pyttsx3
+from server_client import receive_image_from_pi,send_audio_to_pi
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,10 +24,14 @@ prompt_template = PromptTemplate.from_template(
 # Function to convert text to speech and save as MP3
 def text_to_speech(text, output_file="summary.mp3"):
     engine = pyttsx3.init()
-    engine.setProperty('rate', 150)  # Speed of speech
+    engine.setProperty('rate', 100)  # Speed of speech
     engine.save_to_file(text, output_file)
-    engine.say(text)
-    engine.runAndWait()
+    engine.runAndWait()  # Waits until file is actually created
+    if os.path.exists(output_file):
+        send_audio_to_pi(output_file)
+    else:
+        print("Audio file not created properly.")
+    
 
 # Function to determine object position based on bounding box
 def get_object_position(box, frame_width, frame_height):
@@ -92,6 +97,9 @@ def get_environment_summary_from_frame(source):
 
 # Example usage
 # For video (first frame):
-summary = get_environment_summary_from_frame('C:/Users/jeffr/OneDrive/Desktop/smart_glasses/eg.mp4')
-print(summary)
 
+img_path=receive_image_from_pi()
+
+if img_path:  # Ensure image was received
+    summary = get_environment_summary_from_frame(img_path)
+    print(summary)

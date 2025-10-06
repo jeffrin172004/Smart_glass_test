@@ -1,0 +1,9 @@
+.env/
+
+yolov8n.pt
+
+summary.mp3
+
+received_image.jpg
+
+venv
